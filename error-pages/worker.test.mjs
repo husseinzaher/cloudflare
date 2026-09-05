@@ -148,7 +148,9 @@ test('a different DOMAIN does not inherit the configured site\'s hostnames', asy
   const out = await buildWith({ DOMAIN: 'somewhere-else.example', BRAND_NAME: 'Somewhere Else' });
   assert.match(out, /a site of its own/);
   assert.match(out, /somewhere-else\.example/);
-  assert.doesNotMatch(out, /tajeerai/, 'the foreign site inherited the configured site');
+  // The hostnames are what must not leak - the monitor line may legitimately
+  // name a repository that has the same word in it.
+  assert.doesNotMatch(out, /tajeerai\.com/, 'the foreign site inherited the configured site\'s hostnames');
 });
 
 test('an override without a DOMAIN keeps the configured site', async () => {

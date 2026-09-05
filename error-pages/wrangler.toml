@@ -27,3 +27,9 @@ routes = [
 # Cloudflare's builder after a push. Rerunning it rewrites this file identically.
 [build]
 command = "node build.mjs"
+
+# The uptime watch: checks the site on a schedule and files a GitHub issue
+# when it stops answering. Scheduled runs count as requests, so every five
+# minutes is 288 a day - nothing against the daily allowance.
+[triggers]
+crons = ["*/5 * * * *"]

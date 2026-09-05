@@ -9,22 +9,27 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync, unlinkSync, existsSync } from 'node:fs';
 
 const here = new URL('.', import.meta.url).pathname;
-const envPath = here + '.env';
+const scratch = here + '.worker.monitor.test.mjs';
 let worker;
 let calls;
 
-// Build once with the watch enabled, then restore the repository's own build.
+// Build once with the watch enabled, then put the repository's own build back.
+//
+// The watch is switched on through the environment, never by writing a .env
+// here: an earlier version of this file wrote one and deleted it afterwards,
+// which quietly deleted the real .env of anyone who had one.
 before(async () => {
-  writeFileSync(envPath, 'MONITOR_REPO=husseinzaher/tajeerai\n');
   try {
-    execFileSync('node', ['build.mjs'], { cwd: here, encoding: 'utf8' });
-    const built = readFileSync(here + 'worker.js', 'utf8');
-    writeFileSync(here + '.worker.monitor.test.mjs', built);
+    execFileSync('node', ['build.mjs'], {
+      cwd: here,
+      env: { ...process.env, MONITOR_REPO: 'husseinzaher/tajeerai' },
+      encoding: 'utf8',
+    });
+    writeFileSync(scratch, readFileSync(here + 'worker.js', 'utf8'));
     worker = (await import('./.worker.monitor.test.mjs')).default;
   } finally {
-    if (existsSync(envPath)) unlinkSync(envPath);
     execFileSync('node', ['build.mjs'], { cwd: here, encoding: 'utf8' });
-    if (existsSync(here + '.worker.monitor.test.mjs')) unlinkSync(here + '.worker.monitor.test.mjs');
+    if (existsSync(scratch)) unlinkSync(scratch);
   }
 });
 
