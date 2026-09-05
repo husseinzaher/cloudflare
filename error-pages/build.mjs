@@ -47,7 +47,7 @@ const ENV_KEYS = [
   'COLOR_DESTRUCTIVE', 'COLOR_FOREGROUND', 'COLOR_MUTED_FOREGROUND',
   'FONT_STACK', 'FONT_LATIN_STACK', 'FONT_GOOGLE',
   'HEALTH_PATH', 'JSON_PREFIXES', 'STATIC_OUT_DIR',
-  'MONITOR_REPO', 'MONITOR_URL', 'MONITOR_TITLE', 'MONITOR_CRON',
+  'MONITOR_REPO', 'MONITOR_URL', 'MONITOR_TITLE', 'MONITOR_CRON', 'MONITOR_STATUS_PATH',
 ];
 
 function readEnv() {
@@ -300,6 +300,9 @@ function monitorConfig(env, site) {
     repo,
     url: value('MONITOR_URL', config.monitor?.url || `https://${site.hostnames[0]}${site.healthPath || '/'}`),
     title: value('MONITOR_TITLE', config.monitor?.title || `${site.brand.name} is down`),
+    // Unauthenticated, and it names the repository it reports to - so it is a
+    // path you can change to something unguessable if that matters to you.
+    statusPath: value('MONITOR_STATUS_PATH', config.monitor?.statusPath || '/__uptime-status'),
   };
 }
 
@@ -423,6 +426,7 @@ const built = sites.map(buildSite);
 const monitor = monitorConfig(env, sites[0]);
 if (monitor.enabled) {
   process.stdout.write(`Uptime watch: ${monitor.url} -> issues on ${monitor.repo}\n`);
+  process.stdout.write(`Is it armed? curl https://${sites[0].hostnames[0]}${monitor.statusPath}\n`);
 }
 built.forEach(writeSiteFiles);
 const bytes = buildWorker(built);

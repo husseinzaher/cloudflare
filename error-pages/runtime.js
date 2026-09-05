@@ -80,6 +80,31 @@ function errorResponse(code, request) {
   });
 }
 
+// Is the alerting actually armed? The watch needs two things that live in
+// different places - configuration baked in at build time, and a token attached
+// to the deployed worker - and losing the token is silent by nature: the watch
+// keeps running and keeps deciding to do nothing.
+//
+// That happened once, and took half an hour to find. So it is answerable in one
+// request now, and worth checking after any deploy.
+function statusResponse(env) {
+  const token = Boolean(env && env.GITHUB_TOKEN);
+  return Response.json(
+    {
+      armed: MONITOR.enabled && token,
+      monitor: MONITOR.enabled
+        ? { repo: MONITOR.repo, url: MONITOR.url, title: MONITOR.title }
+        : null,
+      token,
+      reason: MONITOR.enabled
+        ? (token ? null : 'GITHUB_TOKEN is not set on the deployed worker - run: npx wrangler secret put GITHUB_TOKEN')
+        : 'No MONITOR_REPO configured, so the uptime watch is off.',
+      now: new Date().toISOString(),
+    },
+    { headers: { 'Cache-Control': 'no-store' } },
+  );
+}
+
 export default {
   // Cloudflare's cron trigger. Runs outside any visitor request, which is the
   // whole point: an outage at 3am with no traffic still gets noticed.
@@ -87,7 +112,14 @@ export default {
     ctx.waitUntil(watch(env).catch((error) => console.log(`Uptime watch failed: ${error.message}`)));
   },
 
-  async fetch(request) {
+  async fetch(request, env) {
+    // Answered by the edge, so it works when the origin does not - which is
+    // exactly when you want to know whether the alerting was armed.
+    if (MONITOR.enabled && MONITOR.statusPath) {
+      const { pathname } = new URL(request.url);
+      if (pathname === MONITOR.statusPath) return statusResponse(env);
+    }
+
     try {
       const response = await fetch(request);
       // 502/503/504 are the origin answering - it served its own branded page,

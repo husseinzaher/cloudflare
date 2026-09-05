@@ -276,6 +276,33 @@ trigger to `wrangler.toml`, and leaving `MONITOR_REPO` empty keeps the watch off
 entirely — a monitor with nowhere to report to would read as covered when it is
 not.
 
+### Is it actually armed?
+
+The watch needs two things that live in different places: configuration baked in
+at build time, and a token attached to the deployed worker. Losing the token is
+silent by nature — the watch keeps running and keeps deciding it has nowhere to
+report to. That happened once here, and took half an hour to find.
+
+So it answers in one request, served by the edge and therefore working even when
+the origin is not:
+
+```bash
+curl https://your-domain.com/__uptime-status
+```
+
+```json
+{"armed": true, "token": true, "reason": null,
+ "monitor": {"repo": "you/your-repo", "url": "https://your-domain.com/health", "title": "… is down"}}
+```
+
+`armed: false` comes with a `reason` saying which half is missing. **Worth
+checking after any deploy** — a redeploy is what dropped the token the first
+time.
+
+The endpoint is unauthenticated and names the repository it reports to. Set
+`MONITOR_STATUS_PATH` to something unguessable if that matters to you, or to an
+empty value to remove it.
+
 ### What the alert says
 
 Enough to act on from a phone, without opening a dashboard first. The worker
