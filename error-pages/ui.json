@@ -1,0 +1,28 @@
+{
+  "$comment": "The page's own furniture, per locale. A site inherits the entry for its locale; add a language by adding a key here.",
+
+  "ar": {
+    "codeLabel": "رمز الخطأ",
+    "retry": "إعادة المحاولة",
+    "home": "العودة للرئيسية",
+    "retryingIn": "إعادة المحاولة خلال {seconds} ثانية…",
+    "checking": "جارٍ التحقق من حالة الخدمة…",
+    "back": "عادت الخدمة — جارٍ إعادة التحميل…"
+  },
+  "en": {
+    "codeLabel": "Error",
+    "retry": "Try again",
+    "home": "Back to home",
+    "retryingIn": "Retrying in {seconds}s…",
+    "checking": "Checking the service…",
+    "back": "Back online — reloading…"
+  },
+  "fr": {
+    "codeLabel": "Erreur",
+    "retry": "Réessayer",
+    "home": "Retour à l'accueil",
+    "retryingIn": "Nouvelle tentative dans {seconds} s…",
+    "checking": "Vérification du service…",
+    "back": "De retour — rechargement…"
+  }
+}

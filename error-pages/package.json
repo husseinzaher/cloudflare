@@ -1,0 +1,15 @@
+{
+  "name": "tajeerai-error-worker",
+  "private": true,
+  "type": "module",
+  "description": "Cloudflare edge worker that answers when the origin server is unreachable.",
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "node --test worker.test.mjs",
+    "deploy": "npm run build && wrangler deploy",
+    "tail": "wrangler tail"
+  },
+  "devDependencies": {
+    "wrangler": "^4"
+  }
+}

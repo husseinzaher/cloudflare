@@ -1,0 +1,395 @@
+<!doctype html>
+<html lang="{{LOCALE}}" dir="{{DIR}}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<title>{{BRAND_NAME}}</title>
+{{FONT_LINKS}}
+<style>
+  /* Every value here comes from sites.config.json - this file is a template,
+     and build.mjs stamps one page per site out of it. Nothing is imported at
+     run time on purpose: the page is served exactly when the site it belongs to
+     is unreachable, so it cannot depend on anything the site hosts. */
+  :root {
+    --bg-from: {{COLOR_BG_FROM}};
+    --bg-to: {{COLOR_BG_TO}};
+    --card: rgba(255, 255, 255, 0.05);
+    --card-border: rgba(255, 255, 255, 0.1);
+    --fg: {{COLOR_FOREGROUND}};
+    --fg-muted: {{COLOR_MUTED_FOREGROUND}};
+    --primary: {{COLOR_PRIMARY}};
+    --primary-strong: {{COLOR_PRIMARY_STRONG}};
+    --primary-soft: {{COLOR_PRIMARY_SOFT}};
+    --primary-tint: {{COLOR_PRIMARY_TINT}};
+    --accent: {{COLOR_ACCENT}};
+    --tone: var(--accent);          /* recoloured per error family by JS */
+    --tone-soft: var(--accent);
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body { height: 100%; }
+
+  body {
+    margin: 0;
+    display: grid;
+    place-items: center;
+    padding: 1.5rem;
+    background: var(--bg-from);
+    background-image:
+      radial-gradient(60rem 40rem at 50% -10%, color-mix(in srgb, var(--primary) 35%, transparent), transparent 65%),
+      radial-gradient(45rem 35rem at 90% 110%, color-mix(in srgb, var(--accent) 18%, transparent), transparent 60%),
+      linear-gradient(160deg, var(--bg-from), var(--bg-to));
+    color: var(--fg);
+    font-family: {{FONT_STACK}};
+    -webkit-font-smoothing: antialiased;
+  }
+
+  body::before {
+    content: "";
+    position: fixed;
+    inset: -30%;
+    background:
+      radial-gradient(28rem 28rem at 30% 30%, color-mix(in srgb, var(--primary-soft) 28%, transparent), transparent 60%),
+      radial-gradient(24rem 24rem at 70% 65%, color-mix(in srgb, var(--accent) 20%, transparent), transparent 60%);
+    filter: blur(40px);
+    animation: drift 22s ease-in-out infinite alternate;
+    pointer-events: none;
+  }
+
+  @keyframes drift {
+    from { transform: translate3d(-3%, -2%, 0) scale(1); }
+    to   { transform: translate3d(3%, 4%, 0) scale(1.12); }
+  }
+
+  .card {
+    position: relative;
+    width: min(34rem, 100%);
+    padding: 2.75rem 2.5rem 2rem;
+    text-align: center;
+    border: 1px solid var(--card-border);
+    border-radius: 1.5rem;
+    background: var(--card);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    box-shadow: 0 2rem 4rem rgba(0, 0, 0, 0.45);
+    animation: rise 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(1.25rem); }
+    to   { opacity: 1; transform: none; }
+  }
+
+  .mark {
+    width: 4.5rem;
+    height: 4.5rem;
+    margin: 0 auto 1.5rem;
+    display: grid;
+    place-items: center;
+    border-radius: 1.25rem;
+    background: linear-gradient(135deg, var(--primary), var(--primary-tint));
+    box-shadow: 0 0 0 0.5rem color-mix(in srgb, var(--primary) 14%, transparent),
+                0 1rem 2rem color-mix(in srgb, var(--primary) 40%, transparent);
+  }
+
+  .mark svg { width: 2.25rem; height: 2.25rem; }
+
+  /* Only the "come back in a minute" families spin. */
+  .is-waiting .mark { animation: pulse 2.8s ease-in-out infinite; }
+  .is-waiting .mark svg { animation: spin 4s linear infinite; }
+
+  @keyframes pulse {
+    0%, 100% { box-shadow: 0 0 0 0.5rem color-mix(in srgb, var(--primary) 14%, transparent),
+                           0 1rem 2rem color-mix(in srgb, var(--primary) 40%, transparent); }
+    50%      { box-shadow: 0 0 0 1.1rem transparent,
+                           0 1rem 2.5rem color-mix(in srgb, var(--primary) 55%, transparent); }
+  }
+
+  @keyframes spin { to { transform: rotate({{SPIN_TO}}); } }
+
+  /* The status code, always on screen - the whole point of this page is that
+     nobody has to open devtools to find out which error they hit. */
+  .code {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+    padding: 0.375rem 0.875rem;
+    border: 1px solid color-mix(in srgb, var(--tone) 35%, transparent);
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--tone) 12%, transparent);
+    color: var(--tone-soft);
+    font-size: 0.8125rem;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.02em;
+  }
+
+  .code .dot {
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 50%;
+    background: var(--tone);
+  }
+
+  .is-waiting .code .dot { animation: blink 1.4s ease-in-out infinite; }
+
+  @keyframes blink { 50% { opacity: 0.25; } }
+
+  h1 {
+    margin: 0 0 0.75rem;
+    font-size: clamp(1.375rem, 4.5vw, 1.875rem);
+    font-weight: 700;
+    letter-spacing: -0.01em;
+  }
+
+  p {
+    margin: 0 auto;
+    max-width: 26rem;
+    color: var(--fg-muted);
+    font-size: 1rem;
+    line-height: 1.9;
+  }
+
+  .track {
+    position: relative;
+    height: 0.375rem;
+    margin: 1.75rem 0 1rem;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.08);
+    overflow: hidden;
+    display: none;
+  }
+
+  .is-waiting .track { display: block; }
+
+  .track::after {
+    content: "";
+    position: absolute;
+    inset-block: 0;
+    inset-inline-start: -40%;
+    width: 40%;
+    border-radius: 999px;
+    background: linear-gradient(90deg, transparent, var(--primary-soft), var(--accent), transparent);
+    animation: sweep 1.8s ease-in-out infinite;
+  }
+
+  @keyframes sweep { to { inset-inline-start: 100%; } }
+
+  .status {
+    min-height: 1.5rem;
+    color: var(--fg-muted);
+    font-size: 0.875rem;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.75rem;
+    margin-top: 1.5rem;
+  }
+
+  .btn {
+    appearance: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.625rem 1.25rem;
+    border: 1px solid var(--card-border);
+    border-radius: 0.75rem;
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--fg);
+    font: inherit;
+    font-size: 0.875rem;
+    font-weight: 500;
+    text-decoration: none;
+    cursor: pointer;
+    transition: background 0.2s ease, transform 0.2s ease, border-color 0.2s ease;
+  }
+
+  .btn:hover { background: rgba(255, 255, 255, 0.12); transform: translateY(-1px); }
+  .btn:focus-visible { outline: 2px solid var(--primary-soft); outline-offset: 2px; }
+
+  .btn-primary { border-color: transparent; background: var(--primary); }
+  .btn-primary:hover { background: var(--primary-strong); }
+
+  .secondary {
+    margin-top: 1.75rem;
+    padding-top: 1.25rem;
+    border-top: 1px solid var(--card-border);
+    color: color-mix(in srgb, var(--fg-muted) 75%, transparent);
+    font-family: {{FONT_LATIN_STACK}};
+    font-size: 0.8125rem;
+    line-height: 1.7;
+    direction: {{SECONDARY_DIR}};
+  }
+
+  /* Copyable one-liner for support: code, path and time. */
+  .ref {
+    margin-top: 1rem;
+    color: color-mix(in srgb, var(--fg-muted) 55%, transparent);
+    font-family: Menlo, monospace;
+    font-size: 0.6875rem;
+    line-height: 1.8;
+    direction: ltr;
+    word-break: break-all;
+    user-select: all;
+  }
+
+  .brand {
+    margin-top: 1rem;
+    color: color-mix(in srgb, var(--fg-muted) 60%, transparent);
+    font-size: 0.75rem;
+    letter-spacing: 0.08em;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; }
+  }
+</style>
+</head>
+<body>
+  <main class="card" id="card">
+    <div class="mark" aria-hidden="true">
+      <svg id="icon" viewBox="0 0 24 24" fill="none" stroke="{{COLOR_FOREGROUND}}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 12a9 9 0 1 1-6.219-8.56"></path>
+      </svg>
+    </div>
+
+    <span class="code"><span class="dot"></span><span id="code-label"></span></span>
+
+    <h1 id="title"></h1>
+    <p id="message"></p>
+
+    <div class="track" role="progressbar"></div>
+    <div class="status" id="status" role="status" aria-live="polite"></div>
+
+    <div class="actions">
+      <button class="btn btn-primary" type="button" id="retry"></button>
+      <a class="btn" href="/" id="home"></a>
+    </div>
+
+    <div class="secondary" id="secondary"></div>
+    <div class="ref" id="ref"></div>
+    <div class="brand">{{BRAND_WORDMARK}}</div>
+  </main>
+
+  <script>
+    (function () {
+      // Stamped in by build.mjs from sites.config.json + messages.json.
+      var SITE = {{SITE_JSON}};
+
+      // A static file has no way to know which error it is being shown for, and
+      // the query string nginx puts on the error_page URI is an *internal*
+      // redirect the browser never sees. So the server injects the code here -
+      // nginx with sub_filter, the worker with a string replace - and this reads
+      // it back. The literal placeholder surviving means neither ran; fall back
+      // rather than print it.
+      //
+      // Only the code is injected. The failed path is read from the browser's
+      // own URL below: reflecting a client-controlled path into this script is
+      // an XSS waiting to happen, and the address bar already holds it.
+      var injected = { code: '__CODE__' };
+      var params = new URLSearchParams(window.location.search);
+
+      var raw = injected.code.indexOf('_') === 0 ? params.get('code') : injected.code;
+      var code = parseInt(raw, 10);
+      if (!(code >= 100 && code <= 599)) { code = 500; }
+
+      var entry = SITE.messages[code] || SITE.messages.default;
+      var family = entry.family;
+      var primary = entry[SITE.locale] || entry.en;
+      var secondary = SITE.secondaryLocale ? entry[SITE.secondaryLocale] : null;
+
+      var ICONS = {
+        wait:   '<path d="M21 12a9 9 0 1 1-6.219-8.56"></path>',
+        client: '<circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line>',
+        server: '<path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line>'
+      };
+
+      // Cyan-ish accent = wait it out, amber = the request was wrong,
+      // red = the server broke.
+      var TONES = {
+        wait:   SITE.colors.accent,
+        client: SITE.colors.warning,
+        server: SITE.colors.destructive
+      };
+
+      document.documentElement.style.setProperty('--tone', TONES[family]);
+      document.documentElement.style.setProperty('--tone-soft', TONES[family]);
+      document.getElementById('icon').innerHTML = ICONS[family];
+      document.getElementById('code-label').textContent = SITE.ui.codeLabel + ' ' + code;
+      document.getElementById('title').textContent = primary.title;
+      document.getElementById('message').textContent = primary.message;
+      document.getElementById('retry').textContent = SITE.ui.retry;
+      document.getElementById('home').textContent = SITE.ui.home;
+      document.title = primary.title + ' (' + code + ') — ' + SITE.brand.name;
+
+      if (secondary) {
+        var strong = document.createElement('strong');
+        strong.textContent = code;
+        var node = document.getElementById('secondary');
+        node.appendChild(strong);
+        node.appendChild(document.createTextNode(' — ' + secondary.title + '. ' + secondary.message));
+      }
+
+      var path = window.location.pathname + window.location.search;
+      document.getElementById('ref').textContent =
+        code + ' · ' + path + ' · ' + new Date().toISOString();
+
+      var waiting = family === 'wait';
+      if (waiting) { document.getElementById('card').classList.add('is-waiting'); }
+
+      document.getElementById('retry').addEventListener('click', function () {
+        window.location.href = path;
+      });
+
+      if (!waiting) { return; }
+
+      // Poll the site and reload the moment it answers again, so nobody sits
+      // pressing refresh through a deploy.
+      var status = document.getElementById('status');
+      var delay = 5;       // seconds between attempts
+      var maxDelay = 30;   // backs off, so a long outage is not hammered
+      var remaining = delay;
+
+      function render() {
+        status.textContent = SITE.ui.retryingIn.replace('{seconds}', remaining);
+      }
+
+      function schedule() {
+        delay = Math.min(Math.round(delay * 1.5), maxDelay);
+        remaining = delay;
+        render();
+      }
+
+      function check() {
+        status.textContent = SITE.ui.checking;
+        fetch(SITE.healthPath, { cache: 'no-store' })
+          .then(function (res) {
+            if (res.ok) {
+              status.textContent = SITE.ui.back;
+              window.location.href = path;
+              return;
+            }
+            schedule();
+          })
+          .catch(schedule);
+      }
+
+      setInterval(function () {
+        remaining -= 1;
+        if (remaining > 0) { render(); return; }
+        check();
+      }, 1000);
+
+      render();
+      setTimeout(check, 3000);
+    })();
+  </script>
+</body>
+</html>

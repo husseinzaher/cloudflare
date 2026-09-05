@@ -1,0 +1,46 @@
+{
+  "$comment": "Every site this deployment serves error pages for. Adding a customer is adding an entry here and pushing: the build derives the pages, the worker's host routing and wrangler's routes from this file alone. See README.md.",
+
+  "worker": {
+    "name": "edge-error-pages",
+    "compatibilityDate": "2025-01-01"
+  },
+
+  "defaultSite": "tajeerai",
+
+  "sites": [
+    {
+      "id": "tajeerai",
+      "hostnames": ["tajeerai.com", "www.tajeerai.com"],
+      "zone": "tajeerai.com",
+      "locale": "ar",
+      "secondaryLocale": "en",
+      "brand": {
+        "name": "تاجر AI",
+        "nameEn": "Tajer AI",
+        "wordmark": "تاجر AI · TAJER AI"
+      },
+      "colors": {
+        "bgFrom": "#0f0c2e",
+        "bgTo": "#1e1b4b",
+        "primary": "#4f46e5",
+        "primaryStrong": "#4338ca",
+        "primarySoft": "#818cf8",
+        "primaryTint": "#7c3aed",
+        "accent": "#06b6d4",
+        "warning": "#ebaa2d",
+        "destructive": "#dc5b4d",
+        "foreground": "#ffffff",
+        "mutedForeground": "#a8abc4"
+      },
+      "font": {
+        "stack": "\"IBM Plex Sans Arabic\", \"Inter\", \"Segoe UI\", system-ui, sans-serif",
+        "latinStack": "\"Inter\", \"Segoe UI\", system-ui, sans-serif",
+        "googleFonts": "https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap"
+      },
+      "healthPath": "/api/health",
+      "jsonPrefixes": ["/api/", "/hook/", "/socket.io/"],
+      "staticOutDir": "../../docker/nginx/errors"
+    }
+  ]
+}
