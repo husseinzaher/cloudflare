@@ -97,14 +97,14 @@
   .mark svg { width: 2.25rem; height: 2.25rem; }
 
   /* Only the "come back in a minute" families spin. */
-  .is-waiting .mark { animation: pulse 2.8s ease-in-out infinite; }
+  .is-waiting .mark { animation: pulse 3.6s ease-in-out infinite; }
   .is-waiting .mark svg { animation: spin 4s linear infinite; }
 
   @keyframes pulse {
     0%, 100% { box-shadow: 0 0 0 0.5rem color-mix(in srgb, var(--primary) 14%, transparent),
                            0 1rem 2rem color-mix(in srgb, var(--primary) 40%, transparent); }
-    50%      { box-shadow: 0 0 0 1.1rem transparent,
-                           0 1rem 2.5rem color-mix(in srgb, var(--primary) 55%, transparent); }
+    50%      { box-shadow: 0 0 0 0.9rem transparent,
+                           0 1rem 2.2rem color-mix(in srgb, var(--primary) 45%, transparent); }
   }
 
   @keyframes spin { to { transform: rotate({{SPIN_TO}}); } }
@@ -134,9 +134,9 @@
     background: var(--tone);
   }
 
-  .is-waiting .code .dot { animation: blink 1.4s ease-in-out infinite; }
+  .is-waiting .code .dot { animation: blink 2.4s ease-in-out infinite; }
 
-  @keyframes blink { 50% { opacity: 0.25; } }
+  @keyframes blink { 50% { opacity: 0.55; } }
 
   h1 {
     margin: 0 0 0.75rem;
@@ -169,14 +169,28 @@
     content: "";
     position: absolute;
     inset-block: 0;
-    inset-inline-start: -40%;
-    width: 40%;
+    inset-inline-start: -45%;
+    width: 45%;
     border-radius: 999px;
-    background: linear-gradient(90deg, transparent, var(--primary-soft), var(--accent), transparent);
-    animation: sweep 1.8s ease-in-out infinite;
+    /* Dimmed to roughly half strength. At full brightness this reads as a
+       strobe rather than progress - it is on screen for minutes at a time
+       while someone waits, so it has to be quiet enough to sit next to. */
+    background: linear-gradient(
+      90deg,
+      transparent,
+      color-mix(in srgb, var(--primary-soft) 55%, transparent),
+      color-mix(in srgb, var(--accent) 45%, transparent),
+      transparent
+    );
+    animation: sweep 2.6s cubic-bezier(0.45, 0, 0.55, 1) infinite;
   }
 
-  @keyframes sweep { to { inset-inline-start: 100%; } }
+  /* The pause at the end is the point: without it each pass restarts the
+     instant the last one leaves, which is what makes a sweep flicker. */
+  @keyframes sweep {
+    0%        { inset-inline-start: -45%; }
+    65%, 100% { inset-inline-start: 100%; }
+  }
 
   .status {
     min-height: 1.5rem;
