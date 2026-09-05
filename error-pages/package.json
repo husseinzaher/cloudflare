@@ -7,7 +7,7 @@
   "author": "Hussein Zaher <husseinzaher@outlook.com> (https://linkedin.com/in/husseinzaher)",
   "scripts": {
     "build": "node build.mjs",
-    "test": "node build.mjs && node --test worker.test.mjs",
+    "test": "node build.mjs && node --test worker.test.mjs monitor.test.mjs",
     "deploy": "node build.mjs && wrangler deploy",
     "tail": "wrangler tail"
   },

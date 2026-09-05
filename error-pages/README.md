@@ -247,6 +247,61 @@ countdown, labels — lives in `ui.json`. **A new language is a key in both.**
 
 ---
 
+## Knowing it went down
+
+The page makes an outage look respectable to visitors — which also means an
+outage now looks respectable to you. Something still has to make it arrive as an
+interruption, and a server that has fallen cannot report that it has fallen.
+
+This worker is already running outside the server, so it does the reporting.
+Name a repository and it checks the site on a schedule, opens a GitHub issue
+when it stops answering, comments while it stays down, and closes the issue when
+it recovers:
+
+```ini
+MONITOR_REPO=husseinzaher/tajeerai
+MONITOR_CRON=*/5 * * * *
+```
+
+The token is the one value that must not be committed, so it is a Worker secret
+rather than an `.env` key — set it once, and never again:
+
+```bash
+npx wrangler secret put GITHUB_TOKEN
+```
+
+A fine-grained token with **Issues: read and write** on that repository is
+enough. Nothing else is needed: naming the repository is what adds the cron
+trigger to `wrangler.toml`, and leaving `MONITOR_REPO` empty keeps the watch off
+entirely — a monitor with nowhere to report to would read as covered when it is
+not.
+
+### What the alert says
+
+Enough to act on from a phone, without opening a dashboard first. The worker
+already knows *why* the origin failed, so the issue names it:
+
+| What it saw | What the issue says |
+| --- | --- |
+| 521, 522, 523 | Cloudflare cannot reach the origin at all — nginx is down, or the server is |
+| 525, 526 | The TLS handshake failed — check the Cloudflare origin certificate |
+| 502, 503, 504 | nginx is up but the app containers are not answering — check `docker compose ps` |
+| no response | Nothing answered, not even Cloudflare — check DNS and the zone |
+
+It probes three times, twenty seconds apart, before deciding: one timeout during
+a deploy is not an outage, and an alert that cries wolf gets muted within a week.
+
+### What it costs
+
+Scheduled runs count as Worker requests: 288 a day at five-minute intervals,
+against the free plan's 100,000. The GitHub API calls are free.
+
+> Scheduled runs are the reason this is not a GitHub Actions cron — that spends
+> Actions minutes on a five-minute loop, which is a real budget on a private
+> repository, for a check that is a single HTTP request.
+
+---
+
 ## Serving it from your own server too
 
 The same generated page is worth serving twice, and the two layers do not
@@ -432,9 +487,10 @@ messages.json         status copy, per language, with {brand} interpolated
 ui.json               buttons, countdown and labels, per language
 templates/error.html  one page for every site; the build stamps the tokens in
 templates/error.json  the JSON body for API routes
-runtime.js            the worker's logic — edit this, never worker.js
+runtime.js            the worker's logic and the uptime watch — edit this, never worker.js
 build.mjs             derives dist/, worker.js and wrangler.toml
-worker.test.mjs       12 cases, including a guard against a stale build
+worker.test.mjs       the page and passthrough behaviour, including a stale-build guard
+monitor.test.mjs      the uptime watch against a stubbed GitHub and a stubbed site
 ```
 
 Generated, never edited by hand: `worker.js`, `wrangler.toml`, `dist/`, and any
@@ -460,12 +516,22 @@ Generated, never edited by hand: `worker.js`, `wrangler.toml`, `dist/`, and any
 npm test
 ```
 
-Twelve cases against a stubbed origin, covering the failure you cannot
-reproduce on demand against a working server: connection refused, timeout, TLS
-failure, JSON for API routes, WebSocket, healthy passthrough, the origin's own
-503 left alone, Cloudflare's 52x replaced, branding by hostname, the subdomain
-and unknown-host fallbacks, and a guard that fails if the built worker has
-drifted from the pages in the repository.
+Twenty-one cases against a stubbed origin, covering the failures you cannot
+reproduce on demand against a working server.
+
+The page and the passthrough: connection refused, timeout, TLS failure, JSON for
+API routes, WebSocket, healthy passthrough, the origin's own 503 left alone,
+Cloudflare's 52x replaced, branding by hostname, the subdomain and unknown-host
+fallbacks, the rule that a foreign `DOMAIN` inherits nothing, `[build]` staying
+last in `wrangler.toml`, and a guard that fails if the built worker has drifted
+from the pages in the repository.
+
+The uptime watch — the code least likely to be exercised and most costly to have
+quietly broken, since it only ever runs when something is already wrong: it
+opens an issue naming the cause, does not open a second one for the same
+outage, closes the issue on recovery, stays silent when all is well, reports a
+connection failure as unreachable rather than as a bad status, and does nothing
+at all when no token is set.
 
 ---
 

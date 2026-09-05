@@ -47,6 +47,7 @@ const ENV_KEYS = [
   'COLOR_DESTRUCTIVE', 'COLOR_FOREGROUND', 'COLOR_MUTED_FOREGROUND',
   'FONT_STACK', 'FONT_LATIN_STACK', 'FONT_GOOGLE',
   'HEALTH_PATH', 'JSON_PREFIXES', 'STATIC_OUT_DIR',
+  'MONITOR_REPO', 'MONITOR_URL', 'MONITOR_TITLE', 'MONITOR_CRON',
 ];
 
 function readEnv() {
@@ -286,6 +287,22 @@ function writeSiteFiles({ site, html, json }) {
   }
 }
 
+// The uptime watch is off unless a repository to file issues against is named:
+// there is nowhere to send an alert otherwise, and a monitor that alerts into
+// the void is worse than none - it reads as covered when it is not.
+function monitorConfig(env, site) {
+  const value = (key, fallback = '') => ((env && env[key]) || '').trim() || fallback;
+  const repo = value('MONITOR_REPO', config.monitor?.repo || '');
+  if (!repo) return { enabled: false };
+
+  return {
+    enabled: true,
+    repo,
+    url: value('MONITOR_URL', config.monitor?.url || `https://${site.hostnames[0]}${site.healthPath || '/'}`),
+    title: value('MONITOR_TITLE', config.monitor?.title || `${site.brand.name} is down`),
+  };
+}
+
 function buildWorker(built) {
   // One page per site, and a hostname index pointing into it. The worker looks
   // itself up by the host it was called on, which is what lets one deployment
@@ -310,6 +327,7 @@ function buildWorker(built) {
 `;
 
   const source = runtime
+    .replace('__MONITOR__', () => JSON.stringify(monitor))
     .replace('__PAGES__', () => JSON.stringify(pages))
     .replace('__HOSTS__', () => JSON.stringify(hosts))
     .replace('__DEFAULT_SITE__', () => JSON.stringify(fallback.site.id));
@@ -320,6 +338,13 @@ function buildWorker(built) {
 
 function buildWranglerConfig(built) {
   const worker = config.worker || {};
+  // A cron trigger only earns its place when there is a monitor to run.
+  const cron = monitor.enabled
+    ? `\n# The uptime watch: checks the site on a schedule and files a GitHub issue\n`
+      + `# when it stops answering. Scheduled runs count as requests, so every five\n`
+      + `# minutes is 288 a day - nothing against the daily allowance.\n`
+      + `[triggers]\ncrons = ["${(env && env.MONITOR_CRON) || config.monitor?.cron || '*/5 * * * *'}"]\n`
+    : '';
   const routes = built.flatMap(({ site }) =>
     site.hostnames.map(
       (hostname) => `  { pattern = "${hostname}/*", zone_name = "${required(site.zone, `site "${site.id}" zone`)}" },`,
@@ -356,7 +381,7 @@ ${routes.join('\n')}
 # Cloudflare's builder after a push. Rerunning it rewrites this file identically.
 [build]
 command = "node build.mjs"
-`,
+${cron}`,
   );
 }
 
@@ -395,6 +420,10 @@ if (env) {
 }
 
 const built = sites.map(buildSite);
+const monitor = monitorConfig(env, sites[0]);
+if (monitor.enabled) {
+  process.stdout.write(`Uptime watch: ${monitor.url} -> issues on ${monitor.repo}\n`);
+}
 built.forEach(writeSiteFiles);
 const bytes = buildWorker(built);
 buildWranglerConfig(built);
