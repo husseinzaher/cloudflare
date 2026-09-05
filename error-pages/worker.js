@@ -115,7 +115,7 @@ export default {
 // Configured at build time from the .env (MONITOR_*), except the token: that is
 // a real secret and lives as a Worker secret, set once with
 //   npx wrangler secret put GITHUB_TOKEN
-const MONITOR = {"enabled":true,"repo":"husseinzaher/tajeerai","url":"https://tajeerai.com/api/health","title":"تاجر AI is down"};
+const MONITOR = {"enabled":true,"repo":"husseinzaher/tajeerai","url":"https://tajeerai.com/api/__uptime-selftest","title":"تاجر AI is down"};
 
 const GITHUB_HEADERS = (token) => ({
   Authorization: `Bearer ${token}`,

@@ -32,4 +32,4 @@ command = "node build.mjs"
 # when it stops answering. Scheduled runs count as requests, so every five
 # minutes is 288 a day - nothing against the daily allowance.
 [triggers]
-crons = ["*/5 * * * *"]
+crons = ["* * * * *"]
