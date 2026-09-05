@@ -7,7 +7,7 @@
 // wrangler.toml, and - for a site that names a staticOutDir - a copy where its
 // own web server can serve it. Adding a customer is an entry in
 // sites.config.json and a push; nothing here needs editing for it.
-import { readFileSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, rmSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve, join } from 'node:path';
 
@@ -24,6 +24,119 @@ const runtime = read('runtime.js');
 
 // Languages whose pages have to mirror, not just translate.
 const RTL = new Set(['ar', 'fa', 'he', 'ur']);
+
+// A .env describes one business, and when it exists it *is* the configuration -
+// the whole point being that pointing this worker at a different company is
+// editing one file. sites.config.json stays the path for serving many at once.
+//
+// Deliberately hand-parsed: the file holds branding, not secrets, and adding a
+// dependency to read six lines of KEY=value would be the more surprising
+// choice in a package that otherwise installs nothing to build.
+// Set by readEnv, so the build can report which configuration it actually used.
+let envSource = null;
+
+// The keys a build understands. Fixed rather than "anything in the
+// environment", so a stray variable on the build machine cannot quietly change
+// what gets deployed.
+const ENV_KEYS = [
+  'SITE_ID', 'DOMAIN', 'ZONE', 'EXTRA_DOMAINS', 'WORKER_NAME',
+  'BRAND_NAME', 'BRAND_NAME_EN', 'BRAND_WORDMARK',
+  'LOCALE', 'SECONDARY_LOCALE',
+  'COLOR_BG_FROM', 'COLOR_BG_TO', 'COLOR_PRIMARY', 'COLOR_PRIMARY_STRONG',
+  'COLOR_PRIMARY_SOFT', 'COLOR_PRIMARY_TINT', 'COLOR_ACCENT', 'COLOR_WARNING',
+  'COLOR_DESTRUCTIVE', 'COLOR_FOREGROUND', 'COLOR_MUTED_FOREGROUND',
+  'FONT_STACK', 'FONT_LATIN_STACK', 'FONT_GOOGLE',
+  'HEALTH_PATH', 'JSON_PREFIXES', 'STATIC_OUT_DIR',
+];
+
+function readEnv() {
+  const path = resolve(here, '.env');
+
+  // Cloudflare's build variables arrive as real environment variables, so the
+  // same configuration can live in the dashboard instead of the repository.
+  // They win over the file when both set a key - and the build says which ones
+  // did, because a value overridden invisibly in a dashboard is exactly the
+  // kind of thing nobody finds for an hour.
+  const fromBuildVars = {};
+  for (const key of ENV_KEYS) {
+    const value = process.env[key];
+    if (value !== undefined && value !== '') fromBuildVars[key] = value;
+  }
+  const overrides = Object.keys(fromBuildVars);
+
+  if (!existsSync(path)) {
+    if (!overrides.length) return null;
+    envSource = `build variables (${overrides.join(', ')})`;
+    return fromBuildVars;
+  }
+
+  const env = {};
+  for (const line of readFileSync(path, 'utf8').split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    const at = trimmed.indexOf('=');
+    if (at === -1) continue;
+    const key = trimmed.slice(0, at).trim();
+    let value = trimmed.slice(at + 1).trim();
+    // Strip one layer of wrapping quotes, but leave inner ones alone: a font
+    // stack is written  FONT_STACK="Inter", system-ui  and means it.
+    if (value.length > 1 && value[0] === value.at(-1) && (value[0] === '"' || value[0] === "'")
+        && !value.slice(1, -1).includes(value[0])) {
+      value = value.slice(1, -1);
+    }
+    env[key] = value;
+  }
+
+  envSource = overrides.length
+    ? `.env, overridden by build variables for ${overrides.join(', ')}`
+    : '.env';
+  return { ...env, ...fromBuildVars };
+}
+
+function siteFromEnv(env) {
+  const value = (key, fallback = '') => (env[key] || '').trim() || fallback;
+  const domain = value('DOMAIN');
+  if (!domain) throw new Error('.env: DOMAIN is required (the domain to protect)');
+  const brand = value('BRAND_NAME');
+  if (!brand) throw new Error('.env: BRAND_NAME is required');
+
+  const list = (key) => value(key).split(',').map((item) => item.trim()).filter(Boolean);
+  const primary = value('COLOR_PRIMARY', '#4f46e5');
+
+  return {
+    id: value('SITE_ID', domain.replace(/[^a-z0-9]+/gi, '-').toLowerCase()),
+    hostnames: [domain, ...list('EXTRA_DOMAINS')],
+    zone: value('ZONE', domain),
+    locale: value('LOCALE', 'en'),
+    secondaryLocale: value('SECONDARY_LOCALE') || null,
+    brand: {
+      name: brand,
+      nameEn: value('BRAND_NAME_EN') || undefined,
+      wordmark: value('BRAND_WORDMARK') || brand,
+    },
+    colors: {
+      bgFrom: value('COLOR_BG_FROM', '#0b1020'),
+      bgTo: value('COLOR_BG_TO', '#111a3a'),
+      primary,
+      primaryStrong: value('COLOR_PRIMARY_STRONG', primary),
+      primarySoft: value('COLOR_PRIMARY_SOFT', primary),
+      primaryTint: value('COLOR_PRIMARY_TINT', primary),
+      accent: value('COLOR_ACCENT', '#06b6d4'),
+      warning: value('COLOR_WARNING', '#ebaa2d'),
+      destructive: value('COLOR_DESTRUCTIVE', '#dc5b4d'),
+      foreground: value('COLOR_FOREGROUND', '#ffffff'),
+      mutedForeground: value('COLOR_MUTED_FOREGROUND', '#a8abc4'),
+    },
+    font: {
+      stack: value('FONT_STACK', 'system-ui, sans-serif'),
+      latinStack: value('FONT_LATIN_STACK') || undefined,
+      googleFonts: value('FONT_GOOGLE') || undefined,
+    },
+    healthPath: value('HEALTH_PATH', '/'),
+    jsonPrefixes: list('JSON_PREFIXES'),
+    staticOutDir: value('STATIC_OUT_DIR') || undefined,
+  };
+}
 
 function required(value, what) {
   if (value === undefined || value === null || value === '') {
@@ -152,17 +265,16 @@ function writeSiteFiles({ site, html, json }) {
 }
 
 function buildWorker(built) {
-  // Hostname -> page. The worker looks itself up by the host it was called on,
-  // which is what lets one deployment serve every customer's branding.
-  const bundle = {};
+  // One page per site, and a hostname index pointing into it. The worker looks
+  // itself up by the host it was called on, which is what lets one deployment
+  // serve every customer's branding - without paying for the page once per
+  // hostname.
+  const pages = {};
+  const hosts = {};
   for (const { site, html, json } of built) {
+    pages[site.id] = { id: site.id, html, json, jsonPrefixes: site.jsonPrefixes || [] };
     for (const hostname of site.hostnames) {
-      bundle[hostname.toLowerCase()] = {
-        id: site.id,
-        html,
-        json,
-        jsonPrefixes: site.jsonPrefixes || [],
-      };
+      hosts[hostname.toLowerCase()] = site.id;
     }
   }
 
@@ -176,8 +288,9 @@ function buildWorker(built) {
 `;
 
   const source = runtime
-    .replace('__SITES__', () => JSON.stringify(bundle))
-    .replace('__DEFAULT_HOSTNAME__', () => JSON.stringify(fallback.site.hostnames[0].toLowerCase()));
+    .replace('__PAGES__', () => JSON.stringify(pages))
+    .replace('__HOSTS__', () => JSON.stringify(hosts))
+    .replace('__DEFAULT_SITE__', () => JSON.stringify(fallback.site.id));
 
   writeFileSync(resolve(here, 'worker.js'), banner + source);
   return banner.length + source.length;
@@ -199,12 +312,6 @@ name = "${worker.name || 'edge-error-pages'}"
 main = "worker.js"
 compatibility_date = "${worker.compatibilityDate || '2025-01-01'}"
 
-# Regenerate the pages before every upload, so what is deployed can never drift
-# from sites.config.json - whether the deploy runs here or on Cloudflare's
-# builder after a push. Rerunning build.mjs rewrites this file identically.
-[build]
-command = "node build.mjs"
-
 # No workers.dev URL: on that hostname the worker's passthrough fetch would
 # point at itself, which only produces a confusing broken link. The worker is
 # only meaningful on the routes below.
@@ -216,13 +323,31 @@ workers_dev = false
 routes = [
 ${routes.join('\n')}
 ]
+
+# Last on purpose. A TOML table swallows every key that follows it, so a
+# [build] section placed higher would turn workers_dev and routes into fields of
+# the build table - wrangler warns "Unexpected fields found in build field" and
+# deploys the worker with no routes at all.
+#
+# The command regenerates the pages before every upload, so what is deployed
+# cannot drift from sites.config.json, whether the deploy runs locally or on
+# Cloudflare's builder after a push. Rerunning it rewrites this file identically.
+[build]
+command = "node build.mjs"
 `,
   );
 }
 
 rmSync(resolve(here, 'dist'), { recursive: true, force: true });
 
-const sites = required(config.sites?.length, 'sites') && config.sites;
+const env = readEnv();
+const sites = env ? [siteFromEnv(env)] : (required(config.sites?.length, 'sites') && config.sites);
+if (env) {
+  process.stdout.write(`Configured from ${envSource} (sites.config.json ignored).\n`);
+  if (env.WORKER_NAME) config.worker = { ...config.worker, name: env.WORKER_NAME.trim() };
+  config.defaultSite = sites[0].id;
+}
+
 const built = sites.map(buildSite);
 built.forEach(writeSiteFiles);
 const bytes = buildWorker(built);

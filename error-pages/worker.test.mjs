@@ -116,6 +116,23 @@ test('falls back to the default site for an unknown host', async () => {
   assert.equal(res.headers.get('X-Edge-Site'), 'tajeerai');
 });
 
+test('wrangler.toml keeps [build] last, so the routes survive', async () => {
+  // A TOML table swallows every key after it. With [build] higher up, routes
+  // and workers_dev become fields of the build table, wrangler warns
+  // "Unexpected fields found in build field", and the worker deploys with no
+  // routes at all - it is live and intercepting nothing.
+  const { readFileSync } = await import('node:fs');
+  const toml = readFileSync(new URL('./wrangler.toml', import.meta.url), 'utf8');
+
+  const build = toml.indexOf('[build]');
+  assert.notEqual(build, -1, 'wrangler.toml has no [build] section');
+  for (const key of ['routes = [', 'workers_dev =', 'name =', 'main =', 'compatibility_date =']) {
+    const at = toml.indexOf(key);
+    assert.notEqual(at, -1, `wrangler.toml is missing ${key}`);
+    assert.ok(at < build, `"${key}" must come before [build], or TOML nests it inside the build table`);
+  }
+});
+
 test('the built worker is in step with the sites it was generated from', async () => {
   const { readFileSync } = await import('node:fs');
   const here = (file) => readFileSync(new URL(file, import.meta.url), 'utf8');

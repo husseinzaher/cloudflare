@@ -64,13 +64,124 @@ npm run deploy    # publish to Cloudflare
 ```
 
 The first deploy opens a browser to log in to Cloudflare. Nothing else is
-needed: the routes come from your config.
+needed: the routes come from your config, not from the dashboard.
+
+Point it at your own business first — see
+[Configuring it for your business](#configuring-it-for-your-business).
+
+Read [Before your first deploy](#before-your-first-deploy) once before running
+the deploy command, and [Deployment, step by step](#deployment-step-by-step) for
+the full walkthrough — including deploying from GitHub instead, how to verify it,
+and how to switch it off.
 
 ---
 
-## Adding a site
+## Configuring it for your business
 
-Sites are data, not code. One entry in `sites.config.json` is one customer:
+There are two ways in, and the right one depends on how many businesses this
+deployment answers for.
+
+### One business: `.env`
+
+Copy the template, fill it in, deploy. Every generated page, the worker's name
+and its routes follow from this one file:
+
+```bash
+cp .env.example .env
+```
+
+```ini
+DOMAIN=souqmisr.com
+ZONE=souqmisr.com
+EXTRA_DOMAINS=www.souqmisr.com,shop.souqmisr.com
+WORKER_NAME=souqmisr-error-pages
+
+BRAND_NAME=سوق مصر
+BRAND_NAME_EN=Souq Misr
+LOCALE=ar
+SECONDARY_LOCALE=en
+
+COLOR_BG_FROM=#14100a
+COLOR_BG_TO=#2a1e0c
+COLOR_PRIMARY=#c2410c
+COLOR_ACCENT=#f59e0b
+
+HEALTH_PATH=/status
+JSON_PREFIXES=/api/,/webhooks/
+FONT_STACK="Cairo", system-ui, sans-serif
+FONT_GOOGLE=https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap
+```
+
+```bash
+npm run deploy
+```
+
+That is the whole change. The page is now Arabic, right-to-left, in that
+palette and font, polling `/status`, and the worker claims all three hostnames.
+`.env.example` documents every key; anything you leave out falls back to a
+sensible default.
+
+#### How the `.env` reaches the worker
+
+It does not. Nothing in it is ever read at run time, and none of it belongs in
+Cloudflare's **Variables and Secrets** — it is a *build-time* file, and its
+values are baked into `worker.js` before the upload:
+
+```
+git push
+   ↓
+Cloudflare clones the repo, enters the Path (error-pages/)
+   ↓
+npx wrangler deploy
+   ↓
+wrangler runs [build] command = node build.mjs
+   ↓
+build.mjs reads .env  →  stamps the page, worker.js and wrangler.toml
+   ↓
+wrangler uploads a worker that already contains everything
+```
+
+Deploying from your own machine with `npm run deploy` runs the identical chain.
+
+The same keys can come from Cloudflare's **Variables and secrets** in the build
+settings instead of the file — they arrive as environment variables, and the
+build reads them. Setting both is allowed; the dashboard wins, and the build log
+names every key it overrode, because a value changed invisibly in a dashboard is
+the kind of thing nobody finds for an hour.
+
+Prefer the file. It is reviewable in a diff, it travels with the branch, and it
+cannot be changed by someone who never opened the repository. The dashboard is
+there for the case where a value genuinely must not be committed.
+
+Two consequences worth holding on to:
+
+- **Cloudflare only ever sees what is committed.** That is why the `.env` has to
+  be in the repository — see below.
+- **A change to the `.env` is live only after a redeploy.** Editing it changes
+  nothing on its own; push it, or run `npm run deploy`.
+
+The build announces which configuration it used, as its first line of output, so
+the Cloudflare build log answers "which brand did this actually deploy?"
+directly:
+
+```
+[custom build] Running: node build.mjs
+[custom build] Configured from .env (sites.config.json ignored).
+[custom build] 1 site(s) built: souqmisr-com (souqmisr.com, www.souqmisr.com)
+```
+
+> **Commit the `.env`.** It holds branding, not secrets — no keys, no tokens —
+> and Cloudflare's builder only ever sees what is in the repository. A
+> gitignored `.env` means the remote build silently falls back to
+> `sites.config.json` and deploys the wrong brand.
+
+When a `.env` exists it *is* the configuration, and `sites.config.json` is
+ignored — the build says so in its first line of output, which also shows up in
+the Cloudflare build log.
+
+### Many businesses: `sites.config.json`
+
+Sites are data, not code. One entry is one customer:
 
 ```json
 {
@@ -89,9 +200,10 @@ Sites are data, not code. One entry in `sites.config.json` is one customer:
 }
 ```
 
-Then `npm run deploy`. The build derives everything from that entry: a static
-page for the site, the worker bundle keyed by its hostnames, and the Cloudflare
-routes. There is no template to copy and no route to remember.
+Then `npm run deploy`. The build derives everything from each entry: a static
+page for the site, a hostname index into it, and the Cloudflare routes. There is
+no template to copy and no route to remember. A site costs one copy of its page
+in the bundle no matter how many hostnames point at it.
 
 Requests are branded by the host they arrive on, and an unlisted subdomain falls
 back to its parent domain before it falls back to `defaultSite` — so
@@ -111,6 +223,9 @@ back to its parent domain before it falls back to `defaultSite` — so
 | `jsonPrefixes` | routes whose callers must receive JSON, never a web page |
 | `messages` | per-status copy overrides, merged key by key over the shared catalogue |
 | `staticOutDir` | also write the page where the site's own web server serves it (see below) |
+
+Every one of these has a `.env` equivalent — `sites.config.json` is the same
+shape, repeated per customer.
 
 Copy for every status lives in `messages.json`, in Arabic and English, with
 `{brand}` interpolated per language. The page's own furniture — buttons,
@@ -173,30 +288,132 @@ knowing up front:
 
 ---
 
-## Continuous deployment
+## Deployment, step by step
 
-Connect the repository once and every later edit ships by pushing it —
-**Cloudflare dashboard → Workers & Pages → Create → Continue with GitHub**:
+Two routes to the same place. **A** is the fastest first deploy; **B** is what
+you want afterwards, so later edits ship by pushing them.
 
-| Field | Value |
-| --- | --- |
-| Production branch | `master` |
-| Root directory | `/` *(or the path to this package inside a monorepo)* |
-| Build command | *(leave empty)* |
-| Deploy command | `npx wrangler deploy` |
+### A. From your machine
 
-The build command stays empty because `wrangler.toml` carries
-`[build] command = "node build.mjs"` — wrangler regenerates the pages before it
-uploads, so what is deployed can never drift from what is in the repository.
+1. **Install and log in.** The first `wrangler` command opens a browser to
+   authorise your Cloudflare account.
 
-`npx wrangler tail` streams what the live worker is doing.
+   ```bash
+   npm install
+   npx wrangler login
+   ```
 
----
+2. **Describe your site** in `sites.config.json` — hostnames, zone, brand,
+   colours. See [Configuring it for your business](#configuring-it-for-your-business).
+
+3. **Build and check what came out.** This generates the pages, `worker.js` and
+   the routes in `wrangler.toml`. Read that file before deploying: the routes it
+   lists are exactly the traffic the worker will see.
+
+   ```bash
+   npm run build
+   npm test
+   cat wrangler.toml
+   ```
+
+4. **Deploy.**
+
+   ```bash
+   npm run deploy
+   ```
+
+   Wrangler uploads the worker and claims the routes from `wrangler.toml`. There
+   is nothing to configure in the dashboard.
+
+5. **Verify** — see [Verifying it works](#verifying-it-works) below.
+
+### B. From the Cloudflare dashboard, connected to your repository
+
+1. Push this repository to GitHub.
+2. In the Cloudflare dashboard, go to **Workers & Pages → Create**.
+3. Choose **Continue with GitHub** and authorise Cloudflare for the repository.
+4. Pick the repository, then set:
+
+   | Field | Value |
+   | --- | --- |
+   | Project name | `edge-error-pages` — must match `name` in `wrangler.toml`, or the project and the worker it deploys end up with different names |
+   | Production branch | `main` |
+   | Path / Root directory | `error-pages` — the directory holding `wrangler.toml`, **not** the repository root unless the package sits there |
+   | Build command | *(leave empty)* |
+   | Deploy command | `npx wrangler deploy` |
+   | Non-production branch deploy command | `npx wrangler versions upload` (the default — uploads a version without giving it traffic) |
+   | API token | *Create new token*; name it something you will recognise later, e.g. `edge-error-pages-builds` |
+   | Protect with Cloudflare Access | off |
+
+   The build command stays empty because `wrangler.toml` carries
+   `[build] command = "node build.mjs"` — wrangler regenerates the pages before
+   it uploads, so what is deployed can never drift from what is in the
+   repository.
+
+   If the build fails with *"no config file found"*, the Path is wrong: it has
+   to point at the directory containing `wrangler.toml`.
+
+5. **Create and deploy.** Cloudflare builds, deploys, and claims the routes from
+   `wrangler.toml` — no route to add by hand.
+6. From then on, changing a site's branding or copy is:
+
+   ```bash
+   git commit -am "…" && git push
+   ```
+
+### Verifying it works
+
+1. **Open the site normally.** It must behave exactly as before — the worker
+   adds nothing on a healthy origin. If anything looks off, jump to
+   [Turning it off](#turning-it-off); it is one click.
+
+2. **Watch the worker live**, in a second terminal:
+
+   ```bash
+   npx wrangler tail
+   ```
+
+3. **Take the origin away for a moment** and load the site. On a server running
+   nginx, in a quiet window:
+
+   ```bash
+   sudo systemctl stop nginx && sleep 20 && sudo systemctl start nginx
+   ```
+
+   During those seconds the site should show your branded page with **521** on
+   it, instead of Cloudflare's grey screen — and reload itself once the origin
+   answers again.
+
+4. **Check an API route** during the same window. It must return JSON, not HTML:
+
+   ```bash
+   curl -i https://your-domain.com/api/health
+   ```
+
+   Expect `503`, `Content-Type: application/json`, `X-Edge-Error: 521`, and a
+   body carrying the same code.
+
+### Turning it off
+
+The worker only matters because it is on the route, so removing the route
+disables it instantly and completely — the origin is served directly again, with
+no redeploy:
+
+**Workers & Pages → your worker → Settings → Domains & Routes → remove the
+route.**
+
+Or from the CLI, delete the worker entirely:
+
+```bash
+npx wrangler delete
+```
 
 ## Project layout
 
 ```
-sites.config.json     the sites — hostnames, brand, colours, routes
+.env                  one business: the whole configuration in one file
+.env.example          every key it accepts, documented
+sites.config.json     many businesses: hostnames, brand, colours, routes
 messages.json         status copy, per language, with {brand} interpolated
 ui.json               buttons, countdown and labels, per language
 templates/error.html  one page for every site; the build stamps the tokens in

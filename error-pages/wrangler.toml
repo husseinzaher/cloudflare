@@ -4,12 +4,6 @@ name = "edge-error-pages"
 main = "worker.js"
 compatibility_date = "2025-01-01"
 
-# Regenerate the pages before every upload, so what is deployed can never drift
-# from sites.config.json - whether the deploy runs here or on Cloudflare's
-# builder after a push. Rerunning build.mjs rewrites this file identically.
-[build]
-command = "node build.mjs"
-
 # No workers.dev URL: on that hostname the worker's passthrough fetch would
 # point at itself, which only produces a confusing broken link. The worker is
 # only meaningful on the routes below.
@@ -22,3 +16,14 @@ routes = [
   { pattern = "tajeerai.com/*", zone_name = "tajeerai.com" },
   { pattern = "www.tajeerai.com/*", zone_name = "tajeerai.com" },
 ]
+
+# Last on purpose. A TOML table swallows every key that follows it, so a
+# [build] section placed higher would turn workers_dev and routes into fields of
+# the build table - wrangler warns "Unexpected fields found in build field" and
+# deploys the worker with no routes at all.
+#
+# The command regenerates the pages before every upload, so what is deployed
+# cannot drift from sites.config.json, whether the deploy runs locally or on
+# Cloudflare's builder after a push. Rerunning it rewrites this file identically.
+[build]
+command = "node build.mjs"

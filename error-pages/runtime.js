@@ -7,10 +7,13 @@
 // steps in only when the origin cannot be reached - serving that site's own
 // branded page, with the status code printed on it.
 //
-// One deployment serves many sites: the pages are keyed by hostname, so which
-// branding a visitor sees follows the domain they asked for.
-const SITES = __SITES__;
-const DEFAULT_HOSTNAME = __DEFAULT_HOSTNAME__;
+// One deployment serves many sites: hostnames resolve to a page, so which
+// branding a visitor sees follows the domain they asked for. The two maps are
+// separate on purpose - a site with five hostnames should cost one copy of its
+// page in the bundle, not five, and the bundle has a 1 MB ceiling.
+const PAGES = __PAGES__;
+const HOSTS = __HOSTS__;
+const DEFAULT_SITE = __DEFAULT_SITE__;
 
 // Cloudflare's origin-side codes. If one arrives as a real response rather than
 // a thrown fetch, the edge gave up on the origin and the visitor is looking at
@@ -31,16 +34,16 @@ function codeFromError(error) {
 // site, so a customer does not have to list every subdomain to be branded.
 function siteFor(hostname) {
   const host = hostname.toLowerCase();
-  if (SITES[host]) return SITES[host];
+  if (HOSTS[host]) return PAGES[HOSTS[host]];
 
   const parts = host.split('.');
   while (parts.length > 2) {
     parts.shift();
     const parent = parts.join('.');
-    if (SITES[parent]) return SITES[parent];
+    if (HOSTS[parent]) return PAGES[HOSTS[parent]];
   }
 
-  return SITES[DEFAULT_HOSTNAME];
+  return PAGES[DEFAULT_SITE];
 }
 
 function errorResponse(code, request) {
