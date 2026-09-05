@@ -4,6 +4,12 @@ name = "edge-error-pages"
 main = "worker.js"
 compatibility_date = "2025-01-01"
 
+# Regenerate the pages before every upload, so what is deployed can never drift
+# from sites.config.json - whether the deploy runs here or on Cloudflare's
+# builder after a push. Rerunning build.mjs rewrites this file identically.
+[build]
+command = "node build.mjs"
+
 # No workers.dev URL: on that hostname the worker's passthrough fetch would
 # point at itself, which only produces a confusing broken link. The worker is
 # only meaningful on the routes below.

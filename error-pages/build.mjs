@@ -116,12 +116,15 @@ function buildSite(site) {
   for (const [token, value] of Object.entries(tokens)) {
     html = html.replaceAll(`{{${token}}}`, () => value);
   }
+  html = html.replace(
+    '<!doctype html>',
+    `<!doctype html>\n<!-- GENERATED for site "${site.id}" by cloudflare/error-pages/build.mjs.\n     Edit templates/error.html or sites.config.json and rebuild - changes here are lost. -->`,
+  );
 
   const outage = siteRuntime.messages['503'] || siteRuntime.messages.default;
   const json = jsonTemplate
     .replaceAll('{{JSON_MESSAGE}}', () => (outage[locale] || outage.en).message)
     .replaceAll('{{JSON_MESSAGE_EN}}', () => (outage.en || outage[locale]).message)
-    .replaceAll('"', (m, offset, str) => m) // no-op, keeps the JSON valid by construction
     .trim();
 
   const unresolved = html.match(/\{\{[A-Z_]+\}\}/g);
@@ -195,6 +198,12 @@ function buildWranglerConfig(built) {
 name = "${worker.name || 'edge-error-pages'}"
 main = "worker.js"
 compatibility_date = "${worker.compatibilityDate || '2025-01-01'}"
+
+# Regenerate the pages before every upload, so what is deployed can never drift
+# from sites.config.json - whether the deploy runs here or on Cloudflare's
+# builder after a push. Rerunning build.mjs rewrites this file identically.
+[build]
+command = "node build.mjs"
 
 # No workers.dev URL: on that hostname the worker's passthrough fetch would
 # point at itself, which only produces a confusing broken link. The worker is

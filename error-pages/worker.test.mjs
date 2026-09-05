@@ -2,7 +2,7 @@
 // for - the origin being unreachable - is the one you cannot reproduce by
 // pointing it at a working server.
 //
-//   node --test cloudflare/error-worker/worker.test.mjs
+//   node --test cloudflare/error-pages/worker.test.mjs
 import { test, before, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 
@@ -30,7 +30,7 @@ test('serves the branded page when the origin refuses the connection', async () 
   const res = await worker.fetch(new Request('https://tajeerai.com/dashboard/integrations/whatsapp'));
 
   assert.equal(res.status, 503);
-  assert.equal(res.headers.get('X-Tajeer-Error'), '521');
+  assert.equal(res.headers.get('X-Edge-Error'), '521');
   assert.match(res.headers.get('Content-Type'), /text\/html/);
   assert.match(await res.text(), /var injected = \{ code: '521' \}/);
 });
@@ -48,14 +48,14 @@ test('distinguishes a timeout from a refusal', async () => {
   originFails('Connection timed out');
   const res = await worker.fetch(new Request('https://tajeerai.com/'));
 
-  assert.equal(res.headers.get('X-Tajeer-Error'), '522');
+  assert.equal(res.headers.get('X-Edge-Error'), '522');
 });
 
 test('distinguishes a TLS failure', async () => {
   originFails('SSL handshake failed with origin');
   const res = await worker.fetch(new Request('https://tajeerai.com/'));
 
-  assert.equal(res.headers.get('X-Tajeer-Error'), '525');
+  assert.equal(res.headers.get('X-Edge-Error'), '525');
 });
 
 test('fails a WebSocket upgrade without a body', async () => {
@@ -90,17 +90,44 @@ test("replaces Cloudflare's own origin errors when they arrive as responses", as
   originReturns(new Response('cloudflare screen', { status: 522 }));
   const res = await worker.fetch(new Request('https://tajeerai.com/'));
 
-  assert.equal(res.headers.get('X-Tajeer-Error'), '522');
+  assert.equal(res.headers.get('X-Edge-Error'), '522');
   assert.match(await res.text(), /var injected = \{ code: '522' \}/);
 });
 
-test('the built worker is in step with the page it embeds', async () => {
-  const { readFileSync } = await import('node:fs');
-  const html = readFileSync(new URL('../../docker/nginx/errors/error.html', import.meta.url), 'utf8');
-  const built = readFileSync(new URL('./worker.js', import.meta.url), 'utf8');
+test('brands the page by the hostname it was called on', async () => {
+  originFails('Connection refused');
+  const res = await worker.fetch(new Request('https://www.tajeerai.com/'));
 
-  assert.ok(
-    built.includes(JSON.stringify(html)),
-    'worker.js is stale — run: node cloudflare/error-worker/build.mjs',
-  );
+  assert.equal(res.headers.get('X-Edge-Site'), 'tajeerai');
+  assert.match(await res.text(), /تاجر AI/);
+});
+
+test('falls back from an unlisted subdomain to its parent domain', async () => {
+  originFails('Connection refused');
+  const res = await worker.fetch(new Request('https://staging.tajeerai.com/'));
+
+  assert.equal(res.headers.get('X-Edge-Site'), 'tajeerai');
+});
+
+test('falls back to the default site for an unknown host', async () => {
+  originFails('Connection refused');
+  const res = await worker.fetch(new Request('https://someone-elses-domain.example/'));
+
+  assert.equal(res.headers.get('X-Edge-Site'), 'tajeerai');
+});
+
+test('the built worker is in step with the sites it was generated from', async () => {
+  const { readFileSync } = await import('node:fs');
+  const here = (file) => readFileSync(new URL(file, import.meta.url), 'utf8');
+  const built = here('./worker.js');
+
+  // Every site's generated page has to be inside the bundle, or the deployed
+  // worker is serving something the repository no longer describes.
+  const config = JSON.parse(here('./sites.config.json'));
+  for (const site of config.sites) {
+    assert.ok(
+      built.includes(JSON.stringify(here(`./dist/${site.id}/error.html`))),
+      `worker.js is stale for site "${site.id}" — run: node cloudflare/error-pages/build.mjs`,
+    );
+  }
 });

@@ -1,12 +1,14 @@
 {
-  "name": "tajeerai-error-worker",
+  "name": "edge-error-pages",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "Cloudflare edge worker that answers when the origin server is unreachable.",
+  "description": "Branded, multi-tenant error pages served from Cloudflare's edge - so visitors see your brand even when your server is completely down.",
+  "author": "Hussein Zaher <husseinzaher@outlook.com> (https://linkedin.com/in/husseinzaher)",
   "scripts": {
     "build": "node build.mjs",
-    "test": "node --test worker.test.mjs",
-    "deploy": "npm run build && wrangler deploy",
+    "test": "node build.mjs && node --test worker.test.mjs",
+    "deploy": "node build.mjs && wrangler deploy",
     "tail": "wrangler tail"
   },
   "devDependencies": {
