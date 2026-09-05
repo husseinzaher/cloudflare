@@ -116,6 +116,48 @@ test('falls back to the default site for an unknown host', async () => {
   assert.equal(res.headers.get('X-Edge-Site'), 'tajeerai');
 });
 
+// These run the build with environment overrides, which rewrites the generated
+// files - so each one puts them back before it returns.
+async function buildWith(env) {
+  const { execFileSync } = await import('node:child_process');
+  const here = new URL('.', import.meta.url).pathname;
+  try {
+    return execFileSync('node', ['build.mjs'], {
+      cwd: here,
+      env: { ...process.env, ...env },
+      encoding: 'utf8',
+    });
+  } finally {
+    execFileSync('node', ['build.mjs'], { cwd: here, encoding: 'utf8' });
+  }
+}
+
+test('a different DOMAIN does not inherit the configured site\'s hostnames', async () => {
+  // Inheriting them would be worse than an error: the new business would claim
+  // a Cloudflare route for a domain belonging to the previous one.
+  let error;
+  try {
+    await buildWith({ DOMAIN: 'somewhere-else.example' });
+  } catch (err) {
+    error = err;
+  }
+
+  assert.ok(error, 'a foreign DOMAIN with no BRAND_NAME must fail, not inherit a brand');
+  assert.match(String(error.stderr), /BRAND_NAME is required/);
+
+  const out = await buildWith({ DOMAIN: 'somewhere-else.example', BRAND_NAME: 'Somewhere Else' });
+  assert.match(out, /a site of its own/);
+  assert.match(out, /somewhere-else\.example/);
+  assert.doesNotMatch(out, /tajeerai/, 'the foreign site inherited the configured site');
+});
+
+test('an override without a DOMAIN keeps the configured site', async () => {
+  const out = await buildWith({ COLOR_PRIMARY: '#0d9488' });
+
+  assert.match(out, /over the "tajeerai" site/);
+  assert.match(out, /1 site\(s\) built: tajeerai \(tajeerai\.com, www\.tajeerai\.com\)/);
+});
+
 test('wrangler.toml keeps [build] last, so the routes survive', async () => {
   // A TOML table swallows every key after it. With [build] higher up, routes
   // and workers_dev become fields of the build table, wrangler warns

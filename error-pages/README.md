@@ -149,6 +149,20 @@ build reads them. Setting both is allowed; the dashboard wins, and the build log
 names every key it overrode, because a value changed invisibly in a dashboard is
 the kind of thing nobody finds for an hour.
 
+Either way the values are a **layer over a configured site, not a replacement
+for one**: set `COLOR_PRIMARY` alone and everything else stays as
+`sites.config.json` has it. Which site is being overridden follows `DOMAIN`:
+
+| `DOMAIN` | What happens |
+| --- | --- |
+| unset | the default site in `sites.config.json` is overridden |
+| a hostname that site already has | the same, and the identity is kept |
+| a domain that site does not have | a site of its own — nothing is inherited, and `BRAND_NAME` becomes required |
+
+That last row is a safety rule, not a limitation: a new business silently
+inheriting the previous one's extra hostnames would claim a Cloudflare route for
+a domain that is not its own.
+
 Prefer the file. It is reviewable in a diff, it travels with the branch, and it
 cannot be changed by someone who never opened the repository. The dashboard is
 there for the case where a value genuinely must not be committed.

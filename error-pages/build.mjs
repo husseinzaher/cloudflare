@@ -67,7 +67,7 @@ function readEnv() {
   if (!existsSync(path)) {
     if (!overrides.length) return null;
     envSource = `build variables (${overrides.join(', ')})`;
-    return fromBuildVars;
+    return { ...fromBuildVars, $source: 'vars' };
   }
 
   const env = {};
@@ -90,51 +90,73 @@ function readEnv() {
   envSource = overrides.length
     ? `.env, overridden by build variables for ${overrides.join(', ')}`
     : '.env';
-  return { ...env, ...fromBuildVars };
+  return { ...env, ...fromBuildVars, $source: 'file' };
 }
 
-function siteFromEnv(env) {
+// The env is a layer *over* a site, not a replacement for one. Setting a single
+// COLOR_PRIMARY should recolour the site that is already configured, not demand
+// every other key back from scratch - which is what a build with three
+// variables set and the rest expected from nowhere would mean.
+//
+// `base` is the site being overridden: sites.config.json's defaultSite, or
+// nothing at all when the repository configures no sites and the env is the
+// only source.
+function siteFromEnv(env, base) {
   const value = (key, fallback = '') => (env[key] || '').trim() || fallback;
-  const domain = value('DOMAIN');
-  if (!domain) throw new Error('.env: DOMAIN is required (the domain to protect)');
-  const brand = value('BRAND_NAME');
-  if (!brand) throw new Error('.env: BRAND_NAME is required');
+  const source = env.$source === 'file' ? '.env' : 'build variables';
 
-  const list = (key) => value(key).split(',').map((item) => item.trim()).filter(Boolean);
-  const primary = value('COLOR_PRIMARY', '#4f46e5');
+  const domain = value('DOMAIN', base?.hostnames?.[0]);
+  if (!domain) {
+    throw new Error(`${source}: DOMAIN is required - the domain to protect, e.g. example.com`);
+  }
+  const brand = value('BRAND_NAME', base?.brand?.name);
+  if (!brand) {
+    throw new Error(
+      `${source}: BRAND_NAME is required. Nothing in sites.config.json could supply it - `
+      + 'either set BRAND_NAME, or add the site there and let the env override only what differs.',
+    );
+  }
+
+  const list = (key, fallback = []) => {
+    const raw = value(key);
+    return raw ? raw.split(',').map((item) => item.trim()).filter(Boolean) : fallback;
+  };
+  const colors = base?.colors || {};
+  const primary = value('COLOR_PRIMARY', colors.primary || '#4f46e5');
 
   return {
-    id: value('SITE_ID', domain.replace(/[^a-z0-9]+/gi, '-').toLowerCase()),
-    hostnames: [domain, ...list('EXTRA_DOMAINS')],
-    zone: value('ZONE', domain),
-    locale: value('LOCALE', 'en'),
-    secondaryLocale: value('SECONDARY_LOCALE') || null,
+    id: value('SITE_ID', base?.id || domain.replace(/[^a-z0-9]+/gi, '-').toLowerCase()),
+    hostnames: [domain, ...list('EXTRA_DOMAINS', base?.hostnames?.slice(1) || [])],
+    zone: value('ZONE', base?.zone || domain),
+    locale: value('LOCALE', base?.locale || 'en'),
+    secondaryLocale: value('SECONDARY_LOCALE', base?.secondaryLocale || '') || null,
     brand: {
       name: brand,
-      nameEn: value('BRAND_NAME_EN') || undefined,
-      wordmark: value('BRAND_WORDMARK') || brand,
+      nameEn: value('BRAND_NAME_EN', base?.brand?.nameEn || '') || undefined,
+      wordmark: value('BRAND_WORDMARK', base?.brand?.wordmark || brand),
     },
     colors: {
-      bgFrom: value('COLOR_BG_FROM', '#0b1020'),
-      bgTo: value('COLOR_BG_TO', '#111a3a'),
+      bgFrom: value('COLOR_BG_FROM', colors.bgFrom || '#0b1020'),
+      bgTo: value('COLOR_BG_TO', colors.bgTo || '#111a3a'),
       primary,
-      primaryStrong: value('COLOR_PRIMARY_STRONG', primary),
-      primarySoft: value('COLOR_PRIMARY_SOFT', primary),
-      primaryTint: value('COLOR_PRIMARY_TINT', primary),
-      accent: value('COLOR_ACCENT', '#06b6d4'),
-      warning: value('COLOR_WARNING', '#ebaa2d'),
-      destructive: value('COLOR_DESTRUCTIVE', '#dc5b4d'),
-      foreground: value('COLOR_FOREGROUND', '#ffffff'),
-      mutedForeground: value('COLOR_MUTED_FOREGROUND', '#a8abc4'),
+      primaryStrong: value('COLOR_PRIMARY_STRONG', colors.primaryStrong || primary),
+      primarySoft: value('COLOR_PRIMARY_SOFT', colors.primarySoft || primary),
+      primaryTint: value('COLOR_PRIMARY_TINT', colors.primaryTint || primary),
+      accent: value('COLOR_ACCENT', colors.accent || '#06b6d4'),
+      warning: value('COLOR_WARNING', colors.warning || '#ebaa2d'),
+      destructive: value('COLOR_DESTRUCTIVE', colors.destructive || '#dc5b4d'),
+      foreground: value('COLOR_FOREGROUND', colors.foreground || '#ffffff'),
+      mutedForeground: value('COLOR_MUTED_FOREGROUND', colors.mutedForeground || '#a8abc4'),
     },
     font: {
-      stack: value('FONT_STACK', 'system-ui, sans-serif'),
-      latinStack: value('FONT_LATIN_STACK') || undefined,
-      googleFonts: value('FONT_GOOGLE') || undefined,
+      stack: value('FONT_STACK', base?.font?.stack || 'system-ui, sans-serif'),
+      latinStack: value('FONT_LATIN_STACK', base?.font?.latinStack || '') || undefined,
+      googleFonts: value('FONT_GOOGLE', base?.font?.googleFonts || '') || undefined,
     },
-    healthPath: value('HEALTH_PATH', '/'),
-    jsonPrefixes: list('JSON_PREFIXES'),
-    staticOutDir: value('STATIC_OUT_DIR') || undefined,
+    healthPath: value('HEALTH_PATH', base?.healthPath || '/'),
+    jsonPrefixes: list('JSON_PREFIXES', base?.jsonPrefixes || []),
+    staticOutDir: value('STATIC_OUT_DIR', base?.staticOutDir || '') || undefined,
+    messages: base?.messages,
   };
 }
 
@@ -341,11 +363,35 @@ command = "node build.mjs"
 rmSync(resolve(here, 'dist'), { recursive: true, force: true });
 
 const env = readEnv();
-const sites = env ? [siteFromEnv(env)] : (required(config.sites?.length, 'sites') && config.sites);
+
+// Which configured site, if any, these values are overriding. A DOMAIN naming
+// somewhere else is a *different* business, and inheriting from the previous one
+// would be worse than an error: the new site would quietly keep the old site's
+// extra hostnames and claim a Cloudflare route for a domain that is not its own.
+function baseFor(env, sites) {
+  const configured = (sites || []).find((site) => site.id === config.defaultSite) || sites?.[0];
+  if (!configured) return null;
+
+  const domain = (env.DOMAIN || '').trim().toLowerCase();
+  if (!domain) return configured;
+  return configured.hostnames.some((host) => host.toLowerCase() === domain) ? configured : null;
+}
+
+let sites;
 if (env) {
-  process.stdout.write(`Configured from ${envSource} (sites.config.json ignored).\n`);
+  // One business, whatever the repository lists: the env describes a single
+  // deployment, and a site it names is the thing it overrides.
+  const base = baseFor(env, config.sites);
+  sites = [siteFromEnv(env, base)];
+  process.stdout.write(
+    `Configured from ${envSource}`
+    + (base ? `, over the "${base.id}" site in sites.config.json` : ' (a site of its own)')
+    + '.\n',
+  );
   if (env.WORKER_NAME) config.worker = { ...config.worker, name: env.WORKER_NAME.trim() };
   config.defaultSite = sites[0].id;
+} else {
+  sites = required(config.sites?.length, 'sites') && config.sites;
 }
 
 const built = sites.map(buildSite);
