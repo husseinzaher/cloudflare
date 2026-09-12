@@ -22,6 +22,7 @@
     --primary-strong: {{COLOR_PRIMARY_STRONG}};
     --primary-soft: {{COLOR_PRIMARY_SOFT}};
     --primary-tint: {{COLOR_PRIMARY_TINT}};
+    --primary-fg: {{COLOR_PRIMARY_FOREGROUND}};
     --accent: {{COLOR_ACCENT}};
     --tone: var(--accent);          /* recoloured per error family by JS */
     --tone-soft: var(--accent);
@@ -228,7 +229,9 @@
   .btn:hover { background: rgba(255, 255, 255, 0.12); transform: translateY(-1px); }
   .btn:focus-visible { outline: 2px solid var(--primary-soft); outline-offset: 2px; }
 
-  .btn-primary { border-color: transparent; background: var(--primary); }
+  /* Its own ink, not --fg: --primary may be a light hue, and the page's
+     foreground is white. */
+  .btn-primary { border-color: transparent; background: var(--primary); color: var(--primary-fg); }
   .btn-primary:hover { background: var(--primary-strong); }
 
   .secondary {

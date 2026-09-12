@@ -43,7 +43,8 @@ const ENV_KEYS = [
   'BRAND_NAME', 'BRAND_NAME_EN', 'BRAND_WORDMARK',
   'LOCALE', 'SECONDARY_LOCALE',
   'COLOR_BG_FROM', 'COLOR_BG_TO', 'COLOR_PRIMARY', 'COLOR_PRIMARY_STRONG',
-  'COLOR_PRIMARY_SOFT', 'COLOR_PRIMARY_TINT', 'COLOR_ACCENT', 'COLOR_WARNING',
+  'COLOR_PRIMARY_SOFT', 'COLOR_PRIMARY_TINT', 'COLOR_PRIMARY_FOREGROUND',
+  'COLOR_ACCENT', 'COLOR_WARNING',
   'COLOR_DESTRUCTIVE', 'COLOR_FOREGROUND', 'COLOR_MUTED_FOREGROUND',
   'FONT_STACK', 'FONT_LATIN_STACK', 'FONT_GOOGLE',
   'HEALTH_PATH', 'JSON_PREFIXES', 'STATIC_OUT_DIR',
@@ -143,6 +144,10 @@ function siteFromEnv(env, base) {
       primaryStrong: value('COLOR_PRIMARY_STRONG', colors.primaryStrong || primary),
       primarySoft: value('COLOR_PRIMARY_SOFT', colors.primarySoft || primary),
       primaryTint: value('COLOR_PRIMARY_TINT', colors.primaryTint || primary),
+      // The ink on a filled primary button. Defaults to white because most
+      // brands are dark enough to carry it -- a light one (Tajeer's gold) must
+      // say so, or the one button on the page becomes unreadable.
+      primaryForeground: value('COLOR_PRIMARY_FOREGROUND', colors.primaryForeground || '#ffffff'),
       accent: value('COLOR_ACCENT', colors.accent || '#06b6d4'),
       warning: value('COLOR_WARNING', colors.warning || '#ebaa2d'),
       destructive: value('COLOR_DESTRUCTIVE', colors.destructive || '#dc5b4d'),
@@ -242,6 +247,7 @@ function buildSite(site) {
     COLOR_PRIMARY_STRONG: site.colors.primaryStrong || site.colors.primary,
     COLOR_PRIMARY_SOFT: site.colors.primarySoft || site.colors.primary,
     COLOR_PRIMARY_TINT: site.colors.primaryTint || site.colors.primary,
+    COLOR_PRIMARY_FOREGROUND: site.colors.primaryForeground || '#ffffff',
     COLOR_ACCENT: site.colors.accent,
     COLOR_FOREGROUND: site.colors.foreground || '#ffffff',
     COLOR_MUTED_FOREGROUND: site.colors.mutedForeground || 'rgba(255,255,255,0.7)',

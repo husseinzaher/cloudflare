@@ -21,17 +21,18 @@
         "wordmark": "تاجر AI · TAJER AI"
       },
       "colors": {
-        "bgFrom": "#0f0c2e",
-        "bgTo": "#1e1b4b",
-        "primary": "#4f46e5",
-        "primaryStrong": "#4338ca",
-        "primarySoft": "#818cf8",
-        "primaryTint": "#7c3aed",
-        "accent": "#06b6d4",
-        "warning": "#ebaa2d",
-        "destructive": "#dc5b4d",
-        "foreground": "#ffffff",
-        "mutedForeground": "#a8abc4"
+        "bgFrom": "#111827",
+        "bgTo": "#1f2937",
+        "primary": "#facc15",
+        "primaryStrong": "#eab308",
+        "primarySoft": "#fde047",
+        "primaryTint": "#fbbf24",
+        "primaryForeground": "#111827",
+        "accent": "#60a5fa",
+        "warning": "#fb923c",
+        "destructive": "#ef4444",
+        "foreground": "#f9fafb",
+        "mutedForeground": "#a1aab8"
       },
       "font": {
         "stack": "\"IBM Plex Sans Arabic\", \"Inter\", \"Segoe UI\", system-ui, sans-serif",
